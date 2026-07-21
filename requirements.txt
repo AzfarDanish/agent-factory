@@ -1,0 +1,18 @@
+# Core
+pydantic>=2.0
+pyyaml>=6.0
+
+# Queue backends
+# redis>=5.0  # Phase 2
+
+# API clients
+openai>=1.0
+httpx>=0.27
+
+# Testing
+pytest>=8.0
+pytest-cov>=5.0
+pytest-mock>=3.0
+
+# Development
+pre-commit>=3.0

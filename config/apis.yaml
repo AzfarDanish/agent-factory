@@ -1,0 +1,15 @@
+# External API endpoints and rate limit configuration.
+
+deepseek:
+  base_url: https://api.deepseek.com/v1
+  api_key_env: FACTORY_DEEPSEEK_API_KEY
+  rate_limit:
+    requests_per_minute: 60
+    burst: 10
+
+gpt_image_1:
+  base_url: https://api.openai.com/v1
+  api_key_env: FACTORY_OPENAI_API_KEY
+  rate_limit:
+    requests_per_minute: 10
+    burst: 3

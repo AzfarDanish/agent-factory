@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ColoringPageRequest",
+  "description": "A user-submitted coloring page request",
+  "type": "object",
+  "required": ["prompt", "age_group", "style"],
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500,
+      "description": "Description of the coloring page"
+    },
+    "age_group": {
+      "type": "string",
+      "enum": ["toddler", "child", "teen", "adult"],
+      "description": "Target age group determines complexity"
+    },
+    "style": {
+      "type": "string",
+      "enum": ["simple", "detailed", "mandala", "cartoon", "realistic"],
+      "description": "Art style for the coloring page"
+    },
+    "theme": {
+      "type": "string",
+      "description": "Optional theme category (animals, fantasy, nature, vehicles, etc.)"
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 1,
+      "description": "Number of variations to generate"
+    }
+  }
+}

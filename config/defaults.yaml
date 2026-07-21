@@ -1,0 +1,20 @@
+# Default configuration for the Coloring Page Factory.
+# Overridden by env vars and CLI flags.
+
+queue_backend: file
+
+pipeline:
+  poll_interval_seconds: 1.0
+  max_in_flight: 5
+
+worker:
+  heartbeat_interval_seconds: 30
+  shutdown_timeout_seconds: 10
+
+storage:
+  output_dir: ./output
+  image_format: png
+
+logging:
+  level: INFO
+  format: json

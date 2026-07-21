@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReasoningTask",
+  "description": "Task sent to the Reasoning Worker (DeepSeek) for prompt refinement",
+  "type": "object",
+  "required": ["request_id", "raw_prompt", "age_group", "style"],
+  "properties": {
+    "request_id": { "type": "string", "format": "uuid" },
+    "raw_prompt": { "type": "string", "minLength": 3, "maxLength": 500 },
+    "age_group": { "type": "string", "enum": ["toddler", "child", "teen", "adult"] },
+    "style": { "type": "string", "enum": ["simple", "detailed", "mandala", "cartoon", "realistic"] },
+    "theme": { "type": "string" }
+  }
+}

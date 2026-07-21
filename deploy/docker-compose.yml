@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: orchestrator
+    volumes:
+      - ../.queues:/factory/.queues
+      - ../output:/factory/output
+    env_file: env/.env.example
+    restart: unless-stopped
+
+  reasoning-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: reasoning-worker
+    volumes:
+      - ../.queues:/factory/.queues
+    env_file: env/.env.example
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  image-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: image-worker
+    volumes:
+      - ../.queues:/factory/.queues
+      - ../output:/factory/output
+    env_file: env/.env.example
+    depends_on:
+      - orchestrator
+    restart: unless-stopped

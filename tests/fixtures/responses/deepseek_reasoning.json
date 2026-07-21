@@ -1,0 +1,6 @@
+{
+  "refined_prompt": "Black and white line art coloring page of a unicorn standing in a magical forest, simple cartoon style with thick outlines, castle visible in background, white background, no shading, clear closed shapes suitable for children aged 5-10.",
+  "negative_prompt": "colors, shading, gradients, complex details, text, realistic proportions, violence",
+  "confidence": 0.94,
+  "reasoning": "Simplified the unicorn into basic geometric shapes, reduced forest to 3-4 trees with large crowns, kept castle as simple silhouette with towers."
+}

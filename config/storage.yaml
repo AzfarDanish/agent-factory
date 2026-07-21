@@ -1,0 +1,21 @@
+# Storage configuration for generated images.
+
+output:
+  base_dir: ./output
+  directory_pattern: "{age_group}/{date}"
+  filename_pattern: "{request_id}_{timestamp}.{format}"
+
+  # Per age group subdirectories
+  age_group_dirs:
+    toddler: toddler
+    child: child
+    teen: teen
+    adult: adult
+
+retention:
+  max_age_days: 90
+  max_total_gb: 10
+
+formats:
+  allowed: [png, jpg, webp]
+  default: png

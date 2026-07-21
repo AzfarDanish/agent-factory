@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# Queue artifacts
+.queues/
+
+# Output images
+output/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.local
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+.docker/
+
+# Node
+node_modules/
+.next/
+
+# Data files
+*.pdf

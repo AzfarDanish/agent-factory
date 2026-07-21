@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ImageTask",
+  "description": "Task sent to the Image Worker (GPT Image 1) for generation",
+  "type": "object",
+  "required": ["request_id", "refined_prompt", "negative_prompt", "style"],
+  "properties": {
+    "request_id": { "type": "string", "format": "uuid" },
+    "refined_prompt": { "type": "string", "minLength": 10, "maxLength": 2000 },
+    "negative_prompt": { "type": "string", "description": "What to avoid in generation" },
+    "style": { "type": "string", "enum": ["simple", "detailed", "mandala", "cartoon", "realistic"] },
+    "dimensions": {
+      "type": "object",
+      "properties": {
+        "width": { "type": "integer", "minimum": 512, "maximum": 2048, "default": 1024 },
+        "height": { "type": "integer", "minimum": 512, "maximum": 2048, "default": 1024 }
+      }
+    }
+  }
+}

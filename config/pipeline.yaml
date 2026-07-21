@@ -1,0 +1,45 @@
+# Queue topology and routing rules.
+
+queues:
+  requests:
+    name: coloring.requests
+    file_path: ./.queues/coloring/requests.jsonl
+    schema: schema/request.json
+
+  reasoning:
+    name: coloring.reasoning
+    file_path: ./.queues/coloring/reasoning.jsonl
+    schema: schema/reasoning_task.json
+    dlq: coloring.reasoning.dlq
+
+  image:
+    name: coloring.image
+    file_path: ./.queues/coloring/image.jsonl
+    schema: schema/image_task.json
+    dlq: coloring.image.dlq
+
+  completed:
+    name: coloring.completed
+    file_path: ./.queues/coloring/completed.jsonl
+    schema: schema/result.json
+
+  dlq:
+    name: coloring.dlq
+    file_path: ./.queues/coloring/dlq.jsonl
+    schema: schema/error.json
+
+routing:
+  request_to_reasoning:
+    source: requests
+    target: reasoning
+    payload_transform: request_to_reasoning_task
+
+  reasoning_to_image:
+    source: reasoning
+    target: image
+    payload_transform: reasoning_to_image_task
+
+  image_to_completed:
+    source: image
+    target: completed
+    payload_transform: image_to_result

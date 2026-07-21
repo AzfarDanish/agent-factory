@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeadLetterEntry",
+  "description": "Entry in the dead letter queue for failed messages",
+  "type": "object",
+  "required": ["request_id", "error", "trace", "original_message"],
+  "properties": {
+    "request_id": { "type": "string", "format": "uuid" },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "category"],
+      "properties": {
+        "code": { "type": "string", "description": "Machine-readable error code" },
+        "message": { "type": "string", "description": "Human-readable description" },
+        "category": { "type": "string", "enum": ["transient", "fatal_reject", "fatal_abort", "degraded"] }
+      }
+    },
+    "trace": { "type": "string", "format": "uuid" },
+    "original_message": { "type": "object", "description": "The full original message that failed" },
+    "failed_at": { "type": "string", "format": "date-time" },
+    "retry_count": { "type": "integer", "minimum": 0 }
+  }
+}

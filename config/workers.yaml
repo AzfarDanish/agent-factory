@@ -1,0 +1,27 @@
+# Worker-specific settings.
+
+reasoning_worker:
+  enabled: true
+  input_queue: coloring.reasoning
+  output_queue: coloring.image
+  api_timeout_seconds: 60
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 2
+    max_delay_seconds: 60
+  model: deepseek-chat
+  temperature: 0.7
+  max_tokens: 1024
+
+image_worker:
+  enabled: true
+  input_queue: coloring.image
+  output_queue: coloring.completed
+  api_timeout_seconds: 120
+  retry:
+    max_attempts: 3
+    base_delay_seconds: 5
+    max_delay_seconds: 120
+  model: dall-e-3
+  quality: standard
+  size: 1024x1024

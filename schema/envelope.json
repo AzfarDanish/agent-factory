@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MessageEnvelope",
+  "description": "Outer wrapper for every message on every queue",
+  "type": "object",
+  "required": ["id", "type", "version", "timestamp", "trace_id", "payload"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid", "description": "Unique message ID" },
+    "type": {
+      "type": "string",
+      "enum": ["request", "reasoning_task", "image_task", "result", "error"],
+      "description": "Message type"
+    },
+    "version": { "type": "integer", "minimum": 1, "description": "Schema version" },
+    "timestamp": { "type": "string", "format": "date-time", "description": "ISO-8601 timestamp" },
+    "trace_id": { "type": "string", "format": "uuid", "description": "Correlation ID across the pipeline" },
+    "payload": { "type": "object", "description": "Type-specific payload" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "retry_count": { "type": "integer", "minimum": 0, "default": 0 },
+        "source": { "type": "string", "enum": ["user", "orchestrator", "reasoning_worker", "image_worker"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ColoringPageResult",
+  "description": "Result from the Image Worker after successful generation",
+  "type": "object",
+  "required": ["request_id", "image_path", "image_format", "metadata"],
+  "properties": {
+    "request_id": { "type": "string", "format": "uuid" },
+    "image_path": { "type": "string", "description": "Absolute or relative path to the generated image" },
+    "image_format": { "type": "string", "enum": ["png", "jpg", "webp"], "default": "png" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "prompt_used": { "type": "string" },
+        "generation_time_ms": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["model", "generation_time_ms"]
+    }
+  }
+}

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #030712;
+  color: #f9fafb;
+}
+
+/* Smooth transitions for everything */
+* {
+  transition-property: background-color, border-color, color, opacity, box-shadow;
+  transition-duration: 500ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Pixel-art sprite animations */
+.sprite-idle {
+  animation: sprite-idle 4500ms steps(9) infinite;
+}
+.sprite-walk {
+  animation: sprite-walk 1600ms steps(8) infinite;
+}
+.sprite-work {
+  animation: sprite-work 2400ms steps(8) infinite;
+}
+.sprite-celebrate {
+  animation: sprite-celebrate 1350ms steps(9) infinite;
+}
+.sprite-fail {
+  animation: sprite-fail 3200ms steps(8) infinite;
+}
+
+@keyframes sprite-idle {
+  from { background-position: 0 0; }
+  to { background-position: -864px 0; }
+}
+@keyframes sprite-walk {
+  from { background-position: 0 0; }
+  to { background-position: -768px 0; }
+}
+@keyframes sprite-work {
+  from { background-position: 0 0; }
+  to { background-position: -768px 0; }
+}
+@keyframes sprite-celebrate {
+  from { background-position: 0 0; }
+  to { background-position: -864px 0; }
+}
+@keyframes sprite-fail {
+  from { background-position: 0 0; }
+  to { background-position: -768px 0; }
+}

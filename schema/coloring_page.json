@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ColoringPageDomain",
+  "description": "Domain model: defines what a valid coloring page is and its constraints",
+  "type": "object",
+  "required": ["definition", "constraints"],
+  "properties": {
+    "definition": {
+      "type": "string",
+      "description": "What constitutes a coloring page",
+      "enum": [
+        "black line art on white background",
+        "no filled areas",
+        "no shading or gradients",
+        "closed shapes with clear boundaries"
+      ]
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "line_width": {
+          "type": "object",
+          "properties": {
+            "min_px": { "type": "integer", "default": 1 },
+            "max_px": { "type": "integer", "default": 4 }
+          }
+        },
+        "color_mode": { "type": "string", "enum": ["grayscale", "binary"], "default": "binary" },
+        "background": { "type": "string", "enum": ["white", "transparent"], "default": "white" },
+        "complexity_rules": {
+          "type": "object",
+          "properties": {
+            "toddler": { "type": "string", "description": "5 or fewer closed shapes, thick lines" },
+            "child": { "type": "string", "description": "15 or fewer closed shapes, medium lines" },
+            "teen": { "type": "string", "description": "30 or fewer closed shapes, fine detail allowed" },
+            "adult": { "type": "string", "description": "Unbounded complexity, intricate patterns" }
+          }
+        }
+      }
+    }
+  }
+}

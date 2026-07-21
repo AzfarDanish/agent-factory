@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "coloring-factory"
+version = "0.1.0"
+description = "Queue-driven AI Coloring Page Factory"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["src", "tests"]
+python_files = ["*_test.py", "test_*.py"]
+markers = [
+    "unit: Fast tests with no I/O",
+    "integration: Tests requiring queue backend or mock APIs",
+    "e2e: Tests hitting real APIs (opt-in)",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/test_*"]
+
+[tool.coverage.report]
+show_missing = true
