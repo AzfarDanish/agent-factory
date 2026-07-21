@@ -36,7 +36,7 @@ class ImageWorker(Worker):
         output_dir: str = "output",
         api_key: str | None = None,
         api_base: str = "https://api.openai.com/v1",
-        model: str = "dall-e-3",
+        model: str = "gpt-image-1",
         image_size: str = "1024x1024",
         use_api: bool = True,
     ):
@@ -63,7 +63,12 @@ class ImageWorker(Worker):
             raise FatalError("Empty refined_prompt in image task")
 
         if self.use_api:
-            image_data, generation_time = self._call_gpt_image(refined_prompt)
+            try:
+                image_data, generation_time = self._call_gpt_image(refined_prompt)
+            except (TransientError, FatalError) as e:
+                logger.warning("[image] API call failed: %s", e)
+                logger.info("[image] Falling back to placeholder generation")
+                image_data, generation_time = self._generate_placeholder(refined_prompt)
         else:
             # Demo mode: create a placeholder image
             logger.info("[image] No API key, generating placeholder")
@@ -88,43 +93,71 @@ class ImageWorker(Worker):
         return message.with_payload(result_payload, new_type="result")
 
     def _call_gpt_image(self, prompt: str) -> tuple[bytes, int]:
-        """Call OpenAI DALL-E API to generate an image."""
+        """Call OpenAI DALL-E API to generate an image.
+
+        Tries the configured model first. Falls back to dall-e-2 automatically
+        if the model doesn't exist.
+        """
         import httpx
         import time
 
-        start = time.monotonic()
+        models_to_try = [self.model]
+        # Fallbacks for different OpenAI generations
+        for fallback in ["gpt-image-1", "gpt-image-1-mini", "gpt-image-2"]:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
 
-        try:
-            response = httpx.post(
-                f"{self.api_base}/images/generations",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "n": 1,
-                    "size": self.image_size,
-                    "response_format": "b64_json",
-                },
-                timeout=120.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            b64 = data["data"][0]["b64_json"]
+        last_error = None
 
-            import base64
-            image_bytes = base64.b64decode(b64)
-            elapsed = int((time.monotonic() - start) * 1000)
-            return image_bytes, elapsed
+        for model in models_to_try:
+            start = time.monotonic()
+            size = self.image_size if model == self.model else "512x512"
+            try:
+                response = httpx.post(
+                    f"{self.api_base}/images/generations",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "n": 1,
+                        "size": size,
+                    },
+                    timeout=120.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                item = data["data"][0]
+                if "url" in item:
+                    img_response = httpx.get(item["url"], timeout=60.0)
+                    img_response.raise_for_status()
+                    image_bytes = img_response.content
+                elif "b64_json" in item:
+                    import base64
+                    image_bytes = base64.b64decode(item["b64_json"])
+                else:
+                    raise FatalError(f"Unknown response format: {list(item.keys())}")
+                elapsed = int((time.monotonic() - start) * 1000)
+                logger.info("[image] Generated via %s (%s) in %dms", model, size, elapsed)
+                return image_bytes, elapsed
 
-        except httpx.TimeoutException:
-            raise TransientError("GPT Image API timeout")
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in (429, 502, 503):
-                raise TransientError(f"GPT Image API {e.response.status_code}")
-            raise FatalError(f"GPT Image API error: {e.response.status_code}")
+            except httpx.HTTPStatusError as e:
+                body = e.response.text[:500] if e.response.text else ""
+                if "does not exist" in body and model != models_to_try[-1]:
+                    logger.warning("[image] Model %s unavailable, trying %s", model, models_to_try[-1])
+                    last_error = str(e)
+                    continue
+                if e.response.status_code in (429, 502, 503):
+                    raise TransientError(f"GPT Image API {e.response.status_code}: {body}")
+                raise FatalError(f"GPT Image API error: {e.response.status_code} - {body}")
+            except httpx.TimeoutException:
+                last_error = f"{model} timeout"
+                if model == models_to_try[-1]:
+                    raise TransientError("GPT Image API timeout")
+
+        raise FatalError(f"All image models failed. Last error: {last_error}")
 
     def _generate_placeholder(self, prompt: str) -> tuple[bytes, int]:
         """Generate a simple placeholder PNG using pure Python (no Pillow)."""
@@ -189,3 +222,10 @@ class ImageWorker(Worker):
         file_path.write_bytes(image_data)
         logger.info("[image] Saved: %s (%d bytes)", file_path, len(image_data))
         return file_path
+
+
+if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    worker = ImageWorker(use_api=bool(os.environ.get("FACTORY_OPENAI_API_KEY")))
+    worker.start()

@@ -2,8 +2,23 @@
 
 import sys
 import os
+from pathlib import Path
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env from deploy/env/ (user's API keys)
+from dotenv import load_dotenv
+env_path = Path(__file__).resolve().parent.parent / "deploy" / "env" / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"[pipeline] Loaded env from {env_path}")
+
+# Check API keys
+deepseek_key = os.environ.get('FACTORY_DEEPSEEK_API_KEY', '')
+openai_key = os.environ.get('FACTORY_OPENAI_API_KEY', '')
+print(f"[pipeline] DeepSeek API key: {'set' if deepseek_key else 'NOT SET'}")
+print(f"[pipeline] OpenAI API key:  {'set' if openai_key else 'NOT SET'}")
+sys.stdout.flush()
 
 from src.queue_backends.file_queue import FileQueue
 from src.orchestrator.pipeline import Pipeline
@@ -18,8 +33,21 @@ def run_pipeline(queue_dir='.queues/coloring', output_dir='output'):
     p = Pipeline(queue_dir=queue_dir)
     p._ensure_queues()
 
-    rw = ReasoningWorker(queue_dir=queue_dir, use_api=False)
-    iw = ImageWorker(queue_dir=queue_dir, output_dir=output_dir, use_api=False)
+    # Check for API keys from environment
+    deepseek_key = os.environ.get('FACTORY_DEEPSEEK_API_KEY', '')
+    openai_key = os.environ.get('FACTORY_OPENAI_API_KEY', '')
+
+    rw = ReasoningWorker(
+        queue_dir=queue_dir,
+        use_api=bool(deepseek_key),
+        api_key=deepseek_key or '',
+    )
+    iw = ImageWorker(
+        queue_dir=queue_dir,
+        output_dir=output_dir,
+        use_api=bool(openai_key),
+        api_key=openai_key or '',
+    )
 
     count = 0
     max_requests = 3
@@ -42,7 +70,8 @@ def run_pipeline(queue_dir='.queues/coloring', output_dir='output'):
         q.publish('completed', img_result.to_bytes())
 
         count += 1
-        print(f'Processed: {msg.trace_id[:8]} → {img_result.payload["image_path"]}')
+        model = 'deepseek+openai' if (deepseek_key and openai_key) else 'placeholder'
+        print(f'[{model}] {msg.trace_id[:8]} -> {img_result.payload["image_path"]}')
 
     print(f'Done. {count} requests processed.')
     return count

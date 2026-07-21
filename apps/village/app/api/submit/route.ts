@@ -10,9 +10,9 @@ export async function POST(req: NextRequest) {
     // Handle pipeline trigger request
     if (body.run_pipeline) {
       const scriptPath = join(process.cwd(), '..', '..', 'scripts', 'run_pipeline_once.py')
-      const venvPython = process.env.HERMES_VENV_PYTHON || '/Users/azfardanish/.hermes/hermes-agent/venv/bin/python'
+      const python = process.env.HERMES_VENV_PYTHON || 'python3'
       try {
-        const result = execSync(`"${venvPython}" "${scriptPath}"`, {
+        const result = execSync(`"${python}" "${scriptPath}"`, {
           cwd: join(process.cwd(), '..', '..'),
           timeout: 30000,
           stdio: 'pipe',

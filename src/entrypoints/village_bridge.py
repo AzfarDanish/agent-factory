@@ -13,6 +13,7 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+from dotenv import load_dotenv
 
 
 QUEUE_ORDER = ["requests", "reasoning", "image", "completed", "dlq"]
@@ -43,7 +44,14 @@ class VillageBridge:
         # Event log (in-memory, limited to 200)
         self.events: list[dict] = []
 
+        # Error log (in-memory, limited to 100)
+        self.errors: list[dict] = []
+
         self.poll_count = 0
+        self.health_check_count = 0
+
+        # Check API keys on init
+        self._check_api_keys()
 
     def poll_queues(self) -> list[dict]:
         """Check all queue files for new messages. Returns new events."""
@@ -57,11 +65,25 @@ class VillageBridge:
                 continue
 
             try:
+                size = path.stat().st_size
+                if size > 10_000_000:
+                    self.add_error(
+                        "queue_size_warning",
+                        f"Queue {qname} is large ({size // 1024 // 1024}MB)",
+                        f"size_bytes={size}",
+                        stage="system",
+                    )
                 with open(path, "r") as f:
                     f.seek(cursor)
                     lines = f.readlines()
                     new_pos = f.tell()
-            except OSError:
+            except OSError as e:
+                self.add_error(
+                    "file_error",
+                    f"Failed to read queue file: {qname}",
+                    f"OSError: {e}",
+                    stage="system"
+                )
                 continue
 
             if not lines:
@@ -69,30 +91,60 @@ class VillageBridge:
 
             self.cursors[qname] = new_pos
             event_info = QUEUE_EVENTS[qname]
+            is_dlq = qname == "dlq" or qname.endswith(".dlq")
 
-            for line in lines:
+            for line_num, line in enumerate(lines):
                 line = line.strip()
                 if not line:
                     continue
 
                 try:
                     msg = json.loads(line)
-                except json.JSONDecodeError:
+                    trace_id = msg.get("trace_id", "unknown")
+                    payload = msg.get("payload", {})
+
+                    # Handle DLQ messages — these ARE errors
+                    if is_dlq:
+                        error_info = payload.get("error", {})
+                        err_type = error_info.get("code", "pipeline_error")
+                        err_msg = error_info.get("message", payload.get("error", "Unknown pipeline error"))
+                        agent_name = msg.get("source", "")
+
+                        self.add_error(
+                            "pipeline_error",
+                            f"Pipeline failure: {err_msg[:80]}",
+                            f"trace={trace_id} type={err_type}",
+                            agent=agent_name,
+                            stage="pipeline",
+                        )
+
+                    ev = {
+                        "event": event_info["event"],
+                        "stage": event_info["stage"],
+                        "trace_id": trace_id,
+                        "queue": qname,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "prompt": payload.get("raw_prompt") or payload.get("prompt") or "",
+                        "age_group": payload.get("age_group", "child"),
+                    }
+                    new_events.append(ev)
+
+                except json.JSONDecodeError as e:
+                    self.add_error(
+                        "json_decode_error",
+                        f"Invalid JSON in queue file: {qname}",
+                        f"Line {line_num}: {e}",
+                        stage="queue_processing",
+                    )
+                except Exception as e:
+                    trace_id = ""
+                    self.add_error(
+                        "processing_error",
+                        f"Error processing queue message: {qname}",
+                        f"Exception: {e}",
+                        stage="queue_processing",
+                    )
                     continue
-
-                trace_id = msg.get("trace_id", "unknown")
-                payload = msg.get("payload", {})
-
-                ev = {
-                    "event": event_info["event"],
-                    "stage": event_info["stage"],
-                    "trace_id": trace_id,
-                    "queue": qname,
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "prompt": payload.get("raw_prompt") or payload.get("prompt") or "",
-                    "age_group": payload.get("age_group", "child"),
-                }
-                new_events.append(ev)
 
         if new_events:
             self.events.extend(new_events)
@@ -107,6 +159,71 @@ class VillageBridge:
         if after_index >= len(self.events):
             return []
         return self.events[after_index:]
+
+    def get_errors(self) -> list[dict]:
+        """Return errors log (latest first, limited to 50)."""
+        return self.errors[-50:]
+
+    def add_error(self, error_type: str, message: str, details: str = "", agent: str = "", stage: str = ""):
+        """Add an error to the error log."""
+        # Deduplicate: skip if last error with same type+message is < 5 seconds old
+        if self.errors and self.errors[-1]["type"] == error_type and self.errors[-1]["message"] == message:
+            last_ts = self.errors[-1]["timestamp"]
+            try:
+                last_sec = float(last_ts.split("T")[1].rstrip("Z").split(":")[2])
+                now_sec = float(time.strftime("%S", time.gmtime()))
+                if abs(now_sec - last_sec) < 5:
+                    return
+            except (ValueError, IndexError):
+                pass
+        error = {
+            "type": error_type,
+            "message": message,
+            "details": details,
+            "agent": agent,
+            "stage": stage,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "trace_id": details.split("trace_")[-1].split(" ")[0] if "trace_" in details else "unknown",
+        }
+        self.errors.append(error)
+        if len(self.errors) > 200:
+            self.errors = self.errors[-200:]
+
+    def _check_api_keys(self):
+        """Check if API keys are configured and log warnings if missing."""
+        deepseek = os.environ.get("FACTORY_DEEPSEEK_API_KEY", "")
+        openai = os.environ.get("FACTORY_OPENAI_API_KEY", "")
+        if not deepseek:
+            self.add_error(
+                "config_warning",
+                "DeepSeek API key not set — reasoning will use templates",
+                "Set FACTORY_DEEPSEEK_API_KEY in deploy/env/.env",
+                stage="system",
+            )
+        if not openai:
+            self.add_error(
+                "config_warning",
+                "OpenAI API key not set — images will be placeholders",
+                "Set FACTORY_OPENAI_API_KEY in deploy/env/.env",
+                stage="system",
+            )
+
+    def _check_worker_logs(self):
+        """Scan worker log files for recent error messages."""
+        log_dir = self.queue_dir.parent
+        for log_file in log_dir.glob("*worker*.log"):
+            try:
+                content = log_file.read_text()
+                for line in content.split("\n")[-20:]:
+                    if "ERROR" in line or "FATAL" in line:
+                        self.add_error(
+                            "worker_error",
+                            line.strip()[:120],
+                            f"file={log_file.name}",
+                            stage="worker",
+                        )
+            except OSError:
+                pass
 
     def get_state(self) -> dict:
         """Return current pipeline state."""
@@ -128,6 +245,7 @@ class VillageBridge:
             "state": "running",
             "queue_depths": depths,
             "event_count": len(self.events),
+            "error_count": len(self.errors),
         }
 
 
@@ -150,6 +268,14 @@ def run_server(bridge: VillageBridge, host: str, port: int):
                     "after": after,
                     "count": len(events),
                     "events": events,
+                })
+
+            elif path == "/errors":
+                limit = int(params.get("limit", [50])[0])
+                errors = bridge.get_errors()
+                self._json({
+                    "count": len(errors),
+                    "errors": errors[:limit],
                 })
 
             elif path == "/health":
@@ -178,6 +304,9 @@ def run_server(bridge: VillageBridge, host: str, port: int):
     def poll_loop():
         while not poller_stop.is_set():
             bridge.poll_queues()
+            bridge.health_check_count += 1
+            if bridge.health_check_count % 60 == 0:  # every ~30s
+                bridge._check_worker_logs()
             poller_stop.wait(0.5)
 
     poller = threading.Thread(target=poll_loop, daemon=True)
@@ -196,6 +325,10 @@ def run_server(bridge: VillageBridge, host: str, port: int):
 
 def main():
     import argparse
+
+    env_path = Path(__file__).resolve().parent.parent.parent / "deploy" / "env" / ".env"
+    load_dotenv(env_path)
+
     parser = argparse.ArgumentParser(description="Village Bridge — pipeline event server")
     parser.add_argument("--queue-dir", default=".queues/coloring")
     parser.add_argument("--host", default="localhost")

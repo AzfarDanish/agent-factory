@@ -133,3 +133,10 @@ class ReasoningWorker(Worker):
             "refined_prompt": build_refined_prompt(prompt, age_group, style),
             "negative_prompt": build_negative_prompt(style),
         }
+
+
+if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    worker = ReasoningWorker(use_api=bool(os.environ.get("FACTORY_DEEPSEEK_API_KEY")))
+    worker.start()

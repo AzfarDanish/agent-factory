@@ -25,6 +25,17 @@ for (const b of B) { b.cx = b.col * 16 + b.tileW / 2; b.cy = b.row * 16 + b.tile
 const BLDG = new Map(B.map(b => [b.id, b]))
 
 // ═══════════════════════════════════════════
+// PATH SYSTEM  —  direct point-to-point paths
+// ═══════════════════════════════════════════
+
+type Point = { x: number; y: number }
+
+function getPath(fromId: string, toId: string): Point[] {
+  if (fromId === toId) return [pos(fromId)]
+  return [pos(fromId), pos(toId)]
+}
+
+// ═══════════════════════════════════════════
 // AGENTS  (home building, name, role)
 // ═══════════════════════════════════════════
 
@@ -47,23 +58,38 @@ type AgentStatus = 'idle' | 'walk' | 'work' | 'celebrate' | 'fail'
 type ManagerMsg = { from: string; text: string; ts: number }
 
 interface AgentState {
-  id: string; name: string; fromBldg: string; toBldg: string
-  p: number; status: AgentStatus; role: string; hair: H; home: string
+  id: string; name: string
+  path: Point[]; pathIdx: number; p: number
+  status: AgentStatus; role: string; hair: H; home: string; curBldg: string
 }
 
-const BRIDGE = process.env.NEXT_PUBLIC_BRIDGE_URL || 'http://localhost:3002'
+interface ErrorDisplay {
+  type: string
+  message: string
+  details: string
+  agent: string
+  stage: string
+  timestamp: string
+  trace_id: string
+}
+
+const BRIDGE = process.env.NEXT_PUBLIC_BRIDGE_URL || 'http://localhost:3001'
 
 function pos(bldg: string) {
   const b = BLDG.get(bldg)!
   return { x: b.cx, y: b.cy }
 }
 
+// ═══════════════════════════════════════════
+// HOME COMPONENT
+// ═══════════════════════════════════════════
+
 export default function Home() {
   const [data, setData] = useState<MapData | null>(null)
   const [agents, setAgents] = useState<AgentState[]>([])
   const [msgs, setMsgs] = useState<ManagerMsg[]>([])
   const [queues, setQueues] = useState<Record<string, number>>({})
-  const [done, setDone] = useState(0)
+  const [errors, setErrors] = useState<ErrorDisplay[]>([])
   const [prompt, setPrompt] = useState('')
   const [ageGroup, setAgeGroup] = useState('child')
   const [style, setStyle] = useState('cartoon')
@@ -72,16 +98,26 @@ export default function Home() {
   const [showForm, setShowForm] = useState(true)
   const [expandedBubble, setExpandedBubble] = useState<string | null>(null)
   const [taskActive, setTaskActive] = useState(false)
-  const [currentStage, setCurrentStage] = useState(0) // 0=idle, 1=intake, 2=reasoning, 3=image, 4=assembly, 5=done
+  const [currentStage, setCurrentStage] = useState(0)
+  const [showErrors, setShowErrors] = useState(false)
   const idxRef = useRef(0)
-  const stageRef = useRef(0)
-  stageRef.current = currentStage
+  const errorIdxRef = useRef(0)
+
+  const agentsRef = useRef<AgentState[]>([])
+  const pipelineRef = useRef({
+    phase: 'idle' as 'idle' | 'gathering' | 'active' | 'complete',
+    agentIdx: 0,
+    subPhase: '' as 'walk_to_work' | 'working' | 'walk_to_church' | '',
+    workEndTime: 0,
+    taskActive: false,
+  })
 
   // Init agents at home
   useEffect(() => {
     const initial = AGENT_DEFS.map(a => ({
-      id: a.id, name: a.name, fromBldg: a.home, toBldg: a.home,
-      p: 0, status: 'idle' as AgentStatus, role: a.role, hair: a.hair, home: a.home,
+      id: a.id, name: a.name,
+      path: [pos(a.home)], pathIdx: 0, p: 0,
+      status: 'idle' as AgentStatus, role: a.role, hair: a.hair, home: a.home, curBldg: a.home,
     }))
     setAgents(initial)
   }, [])
@@ -89,95 +125,199 @@ export default function Home() {
   // Load tile data
   useEffect(() => { fetch('/tilemap-village.json').then(r => r.json()).then(setData) }, [])
 
-  // Animation loop
+  // Keep ref in sync with state
+  useEffect(() => { agentsRef.current = agents }, [agents])
+
+  // ── Animation loop  —  advances walking agents along direct paths
   useEffect(() => {
     const tick = setInterval(() => {
       setAgents(prev => {
-        let c = false
-        const n = prev.map(a => {
-          if (a.status !== 'walk') return a
+        let changed = false
+        const next = prev.map(a => {
+          if (a.status !== 'walk' || a.path.length < 2) return a
           const np = a.p + 0.03
-          if (np >= 1) { c = true; return { ...a, p: 1, status: 'work' as const } }
-          c = true
+          if (np >= 1) {
+            changed = true
+            return { ...a, p: 1, status: 'idle' as const, path: [], pathIdx: 0 }
+          }
+          changed = true
           return { ...a, p: np }
         })
-        return c ? n : prev
+        return changed ? next : prev
       })
     }, 80)
     return () => clearInterval(tick)
   }, [])
 
-  // Poll bridge
+  // ── Bridge + errors poll  (every 1s)
   useEffect(() => {
     if (!data) return
+    let init = true
     const poll = async () => {
       try {
-        const [s, e] = await Promise.all([
+        const [s, e, err_resp] = await Promise.all([
           fetch(`${BRIDGE}/state`).then(r => r.json()),
           fetch(`${BRIDGE}/events?after=${idxRef.current}`).then(r => r.json()),
+          fetch(`${BRIDGE}/errors`).then(r => r.json()),
         ])
         setQueues(s.queue_depths || {})
-        if (e.count > 0) { idxRef.current += e.count; processEvents(e.events) }
+        setErrors(err_resp.errors || [])
+        if (init) {
+          idxRef.current = s.event_count || 0
+          init = false
+        } else if (e.count > 0) {
+          idxRef.current += e.count
+          processEvents(e.events)
+        }
       } catch {}
     }
     poll(); const t = setInterval(poll, 1000); return () => clearInterval(t)
   }, [data])
 
+  // ── Pipeline poller  —  watches agent positions and drives the sequence
+  useEffect(() => {
+    if (!taskActive) return
+    const t = setInterval(() => {
+      const p = pipelineRef.current
+      const agents = agentsRef.current
+      if (!p.taskActive) return
+
+      // GATHERING: wait until every agent is idle at church
+      if (p.phase === 'gathering') {
+        if (agents.every(a => a.status === 'idle' && a.curBldg === 'church')) {
+          p.phase = 'active'
+          p.agentIdx = 0
+          setCurrentStage(1)
+          addMsg('Hermes', 'All agents at the Sanctum!')
+          startAgent(0)
+        }
+        return
+      }
+
+      if (p.phase !== 'active' || !p.subPhase) return
+
+      const def = AGENT_DEFS[p.agentIdx]
+      const a = agents.find(x => x.id === def.id)
+      if (!a) return
+
+      // Arrived at work building
+      if (p.subPhase === 'walk_to_work' && a.status === 'idle' && a.curBldg === def.workBldg) {
+        p.subPhase = 'working'
+        p.workEndTime = Date.now() + 3000
+        setAgents(prev => prev.map(x => x.id === def.id ? { ...x, status: 'work' as const } : x))
+        return
+      }
+
+      // Work timer expired
+      if (p.subPhase === 'working' && Date.now() >= p.workEndTime) {
+        addMsg(def.name, doneMsg(def.role))
+        if (def.workBldg === 'church') {
+          advanceToNext(p.agentIdx)
+          return
+        }
+        p.subPhase = 'walk_to_church'
+        setAgents(prev => prev.map(x =>
+          x.id === def.id
+            ? { ...x, path: getPath(def.workBldg, 'church'), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: 'church' }
+            : x
+        ))
+        return
+      }
+
+      // Returned to church after work
+      if (p.subPhase === 'walk_to_church' && a.status === 'idle' && a.curBldg === 'church') {
+        advanceToNext(p.agentIdx)
+        return
+      }
+    }, 200)
+    return () => clearInterval(t)
+  }, [taskActive])
+
+  // ── Idle patrol  —  keeps idle agents walking near their building
+  useEffect(() => {
+    const t = setInterval(() => {
+      const currentAgents = agentsRef.current
+      setAgents(prev => prev.map(a => {
+        if (a.status !== 'idle') return a
+        const ref = currentAgents.find(x => x.id === a.id)
+        if (ref && ref.status !== 'idle') return a
+        const b = BLDG.get(a.curBldg)
+        if (!b) return a
+        const angle = Math.random() * Math.PI * 2
+        const dist = 30 + Math.random() * 20
+        return {
+          ...a,
+          path: [pos(a.curBldg), { x: b.cx + Math.cos(angle) * dist, y: b.cy + Math.sin(angle) * dist }],
+          pathIdx: 0, p: 0,
+          status: 'walk' as const,
+        }
+      }))
+    }, 3000)
+    return () => clearInterval(t)
+  }, [])
+
+  // ── Pipeline actions ──
+
   function processEvents(events: any[]) {
     for (const ev of events) {
       const stage = ev.stage
       const promptText = (ev.prompt || 'page').slice(0, 25)
-
-      if (stage === 'reasoning' && !taskActive) {
+      if (stage === 'reasoning' && !pipelineRef.current.taskActive) {
+        const p = pipelineRef.current
+        p.taskActive = true
+        p.phase = 'gathering'
         setTaskActive(true)
         setCurrentStage(0)
-        addMsg('Hermes', `📋 New request: "${promptText}" — gather at Sanctum!`)
-        // Stage 0: all agents walk to church
-        moveAllTo('church')
+        addMsg('Hermes', `📋 New request: "${promptText}" — agents gather at Sanctum!`)
+        gatherAtChurch()
       }
-      if (stage === 'generating' && currentStage < 2) advancePipeline()
-      if (stage === 'completed' && currentStage < 3) advancePipeline()
-      if (stage === 'done' && currentStage < 4) advancePipeline()
     }
   }
 
-  function advancePipeline() {
-    const next = stageRef.current + 1
-    setCurrentStage(next)
-    const agent = AGENT_DEFS[next - 1]
-    if (agent) {
-      agentWalksToWork(agent.id)
-    }
-  }
-
-  function moveAllTo(bldgId: string) {
+  function gatherAtChurch() {
     setAgents(prev => prev.map(a => {
-      // If already at church, stay
-      if (a.toBldg === bldgId && a.p >= 1) return a
-      return { ...a, fromBldg: a.toBldg, toBldg: bldgId, p: 0, status: 'walk' as const }
+      if (a.curBldg === 'church' && a.status === 'idle') return a
+      return {
+        ...a, path: getPath(a.curBldg, 'church'),
+        pathIdx: 0, p: 0, status: 'walk' as const, curBldg: 'church',
+      }
     }))
   }
 
-  function agentWalksToWork(agentId: string) {
-    const def = AGENT_DEFS.find(a => a.id === agentId)!
-    addMsg(def.name, startingMsg(def.role))
-    setAgents(prev => prev.map(a =>
-      a.id === agentId
-        ? { ...a, fromBldg: a.toBldg, toBldg: def.workBldg, p: 0, status: 'walk' as const }
-        : a
-    ))
-    // When agent arrives at work building, schedule return
-    setTimeout(() => {
-      addMsg(def.name, doneMsg(def.role))
-      // Return to church, then trigger next stage
-      setAgents(prev => prev.map(a =>
-        a.id === agentId
-          ? { ...a, fromBldg: def.workBldg, toBldg: 'church', p: 0, status: 'walk' as const }
-          : a
+  function startAgent(idx: number) {
+    const def = AGENT_DEFS[idx]
+    const p = pipelineRef.current
+    if (def.workBldg === 'church') {
+      p.subPhase = 'working'
+      p.workEndTime = Date.now() + 2000
+      setAgents(prev => prev.map(x => x.id === def.id ? { ...x, status: 'work' as const } : x))
+      addMsg(def.name, startingMsg(def.role))
+    } else {
+      p.subPhase = 'walk_to_work'
+      setAgents(prev => prev.map(x =>
+        x.id === def.id
+          ? { ...x, path: getPath('church', def.workBldg), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: def.workBldg }
+          : x
       ))
-      // After returning, advance pipeline
-      setTimeout(() => advancePipeline(), 4000)
-    }, 5000)
+      addMsg(def.name, startingMsg(def.role))
+    }
+  }
+
+  function advanceToNext(idx: number) {
+    const p = pipelineRef.current
+    const nextIdx = idx + 1
+    if (nextIdx >= AGENT_DEFS.length) {
+      p.phase = 'complete'
+      p.taskActive = false
+      p.subPhase = ''
+      setTaskActive(false)
+      setCurrentStage(4)
+      addMsg('Hermes', '🎉 All tasks complete!')
+    } else {
+      p.agentIdx = nextIdx
+      p.subPhase = ''
+      startAgent(nextIdx)
+    }
   }
 
   function addMsg(from: string, text: string) {
@@ -196,12 +336,12 @@ export default function Home() {
 
   function doneMsg(role: string): string {
     const m: Record<string, string> = {
-      'Intake': `Intake done. Returning to Sanctum.`,
-      'Prompt Craft': `Crafted the perfect prompt. Back to Sanctum.`,
-      'Image Gen': `Artwork complete! Heading back.`,
-      'Assembly': `All stored. Mission complete!`,
+      'Intake': 'Intake done. Returning to Sanctum.',
+      'Prompt Craft': 'Crafted the perfect prompt. Back to Sanctum.',
+      'Image Gen': 'Artwork complete! Heading back.',
+      'Assembly': 'All stored. Mission complete!',
     }
-    return m[role] || `Done. Returning.`
+    return m[role] || 'Done. Returning.'
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -237,16 +377,22 @@ export default function Home() {
       {/* ── AGENTS ── */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         {agents.map(a => {
-          const f = BLDG.get(a.fromBldg)!
-          const t = BLDG.get(a.toBldg)!
-          const x = f.cx + (t.cx - f.cx) * a.p
-          const y = f.cy + (t.cy - f.cy) * a.p
+          const pos = (() => {
+            if (a.path.length < 2) {
+              const b = BLDG.get(a.curBldg)!
+              return { x: b.cx, y: b.cy }
+            }
+            const idx = Math.min(a.pathIdx, a.path.length - 2)
+            const s = a.path[idx]
+            const e = a.path[idx + 1]
+            return { x: s.x + (e.x - s.x) * a.p, y: s.y + (e.y - s.y) * a.p }
+          })()
           const anim = a.status === 'work' ? 'work' : a.status === 'celebrate' ? 'celebrate' : a.status === 'fail' ? 'fail' : a.status === 'idle' ? 'idle' : 'walk'
           const latestMsg = msgs.filter(m => m.from === a.name).slice(-1)[0]
           const isExpanded = expandedBubble === a.id
 
           return (
-            <div key={a.id} className="absolute z-20 flex flex-col items-center" style={{ left: x - 48, top: y - 64 }}>
+            <div key={a.id} className="absolute z-20 flex flex-col items-center" style={{ left: pos.x - 48, top: pos.y - 64 }}>
               {/* Chat bubble */}
               {latestMsg && (
                 <div className="relative mb-1.5 cursor-pointer select-none" style={{ maxWidth: 180 }} onClick={() => setExpandedBubble(isExpanded ? null : a.id)}>
@@ -269,7 +415,7 @@ export default function Home() {
                 <SpriteCharacter anim={anim} hair={a.hair} />
               </div>
 
-              {/* Name label — always visible */}
+              {/* Name label */}
               <div className="mt-1 px-2 py-0.5 bg-black text-white text-[9px] font-bold rounded-full border border-white/20 shadow-md whitespace-nowrap">
                 {a.name}
               </div>
@@ -319,12 +465,74 @@ export default function Home() {
         {Object.entries(queues).map(([q, d]) => (
           <div key={q} className="flex justify-between mb-1"><span className="text-gray-300">{q}</span><span className={`font-mono ${(d as number) > 0 ? 'text-blue-300' : 'text-gray-500'}`}>{(d as number) > 0 ? `${d}` : '—'}</span></div>
         ))}
-        <div className="border-t border-gray-700/50 mt-1.5 pt-1.5 flex justify-between"><span className="text-gray-400">Done</span><span className="font-mono text-green-300">{done}</span></div>
+        <div className="border-t border-gray-700/50 mt-1.5 pt-1.5 flex justify-between"><span className="text-gray-400">Stage</span><span className="font-mono text-green-300">{currentStage}/{AGENT_DEFS.length}</span></div>
         {msgs.slice(-1).map((m, i) => (
           <div key={i} className="mt-2 pt-1.5 border-t border-gray-700/50 text-[9px]">
             <span className="text-gray-500">{m.from}:</span> <span className="text-gray-300">{m.text.slice(0, 40)}</span>
           </div>
         ))}
+      </div>
+
+      {/* ── ERROR PANEL (bottom-left) ── */}
+      <div className="absolute bottom-4 left-4 z-30">
+        <button
+          onClick={() => setShowErrors(!showErrors)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-lg border ${
+            errors.length > 0
+              ? 'bg-red-900/80 border-red-700 text-red-200 hover:bg-red-800/80'
+              : 'bg-gray-900/80 border-gray-700 text-gray-400 hover:bg-gray-800/80'
+          }`}
+        >
+          <span className="text-base">⚠</span>
+          <span>Errors</span>
+          {errors.length > 0 && (
+            <span className="ml-0.5 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded-full min-w-[18px] text-center">
+              {errors.length > 99 ? '99+' : errors.length}
+            </span>
+          )}
+        </button>
+        {showErrors && (
+          <div className="mt-2 w-[420px] max-w-[90vw] max-h-[300px] bg-gray-950/95 backdrop-blur-md border border-gray-700/80 rounded-xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Error Log</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-gray-500">{errors.length} total</span>
+                <button onClick={() => setErrors([])} className="text-[9px] text-gray-600 hover:text-gray-400 transition-colors">Clear</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[240px]">
+              {errors.length === 0 ? (
+                <div className="px-3 py-4 text-center text-[11px] text-gray-600">No errors recorded</div>
+              ) : (
+                [...errors].reverse().slice(0, 50).map((err, i) => {
+                  const isCritical = err.type === 'pipeline_error' || err.type === 'file_error'
+                  const isWarning = err.type === 'json_decode_error' || err.type === 'processing_error'
+                  return (
+                    <div key={i} className={`px-3 py-2 border-b border-gray-800/50 last:border-0 ${isCritical ? 'bg-red-950/30' : isWarning ? 'bg-yellow-950/20' : ''}`}>
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 text-[10px]">{isCritical ? '🔴' : isWarning ? '🟡' : '🔵'}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-semibold truncate text-gray-300">{err.message}</span>
+                            <span className="text-[8px] text-gray-600 whitespace-nowrap font-mono">{err.timestamp?.split('T')[1]?.replace('Z', '') || ''}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[8px] text-gray-500 bg-gray-800/60 px-1.5 py-0.5 rounded-full">{err.type}</span>
+                            {err.stage && <span className="text-[8px] text-gray-600">{err.stage}</span>}
+                            {err.agent && <span className="text-[8px] text-gray-500">agent: {err.agent}</span>}
+                          </div>
+                          {err.details && (
+                            <div className="text-[8px] text-gray-600 mt-0.5 truncate">{err.details}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </VillageView>
   )

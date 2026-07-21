@@ -44,20 +44,22 @@ export function SpriteCharacter({ anim, hair, className = "" }: SpriteCharacterP
     backgroundSize: `${config.totalWidth}px 64px`,
   };
 
+  const actualAnim = anim === 'work' ? 'doing' : anim === 'celebrate' ? 'jump' : anim === 'fail' ? 'hurt' : anim
+
   return (
     <div className={`relative inline-block ${className}`} style={{ width: 96, height: 64 }}>
       <div
         className={`sprite-${anim}`}
         style={{
           ...baseStyle,
-          backgroundImage: `url(/characters/${anim}/base_${anim}_strip${config.frames}.png)`,
+          backgroundImage: `url(/characters/${actualAnim}/base_${actualAnim}_strip${config.frames}.png)`,
         }}
       />
       <div
         className={`sprite-${anim} z-10`}
         style={{
           ...baseStyle,
-          backgroundImage: `url(/characters/${anim}/${hairStyle}_${anim}_strip${config.frames}.png)`,
+          backgroundImage: `url(/characters/${actualAnim}/${hairStyle}_${actualAnim}_strip${config.frames}.png)`,
         }}
       />
     </div>

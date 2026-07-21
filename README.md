@@ -5,44 +5,89 @@ A queue-driven AI factory that produces coloring pages on demand.
 **Architecture:**
 - **Hermes** — orchestrator only (no reasoning, no image generation)
 - **DeepSeek** — prompt reasoning and refinement
-- **GPT Image 1** — image generation
+- **GPT Image 1 / DALL-E 3** — image generation
 - **Queues** — all worker communication (never direct)
 
-## Quickstart
+---
+
+## Quick Start
+
+### 1. Set API keys
 
 ```bash
-# Install
-pip install -r requirements.txt
-
-# Run the factory
-./scripts/run.sh
-
-# Submit a request
-python -m src.entrypoints.cli submit --prompt "a dragon in a forest" --age-group child
+nano ~/Projects/coloring-factory/deploy/env/.env
 ```
 
-## Project Map
+Contents:
+```
+FACTORY_DEEPSEEK_API_KEY=sk-your-deepseek-key
+FACTORY_OPENAI_API_KEY=sk-your-openai-key
+```
 
-| Directory | Responsibility |
+Without keys the pipeline works but generates placeholder shapes.
+
+### 2. Start everything (one command)
+
+```bash
+cd ~/Projects/coloring-factory/apps/village && pnpm run dev:all
+```
+
+This starts the bridge server (port 3001) and the village UI (port 3000) together.
+
+Open `http://localhost:3000`.
+
+### 3. Submit a request
+
+Type a prompt into the village form, pick age/style, click Generate.
+
+### 4. (Optional) Run from terminal
+
+```bash
+cd ~/Projects/coloring-factory
+python -m src.entrypoints.cli submit "a dragon" --age-group child --style cartoon
+python scripts/run_pipeline_once.py
+```
+
+---
+
+## How it works
+
+```
+You submit a request
+  → Village form writes to queue file
+  → Bridge detects new message, broadcasts event
+  → Village agents animate: Gatehouse → Church → Artisan Hall → Archive
+  → Pipeline: validate → DeepSeek refines prompt → DALL-E generates image
+  → Image saved to: output/{style}/{date}/{request_id}.png
+```
+
+---
+
+## Commands
+
+| What | Command |
 |---|---|
-| `schema/` | Message payload schemas (JSON Schema) |
-| `config/` | Pipeline, worker, and API configuration |
+| Start everything | `cd apps/village && pnpm run dev:all` |
+| Start bridge only | `python -m src.entrypoints.village_bridge` |
+| Start village only | `cd apps/village && pnpm run dev` |
+| Submit request | `python -m src.entrypoints.cli submit "prompt" --age-group child --style cartoon` |
+| Run pipeline | `python scripts/run_pipeline_once.py` |
+| Run tests | `python -m pytest src/ tests/ -v` |
+| Stop all | Ctrl+C |
+
+---
+
+## Project structure
+
+| Directory | Purpose |
+|---|---|
+| `src/core/` | Message envelope, coloring rules, prompt templates |
+| `src/queue_backends/` | File-based queue (JSONL) |
+| `src/workers/` | DeepSeek reasoner + DALL-E generator |
+| `src/orchestrator/` | Pipeline routing, state machine, error handling |
+| `src/entrypoints/` | CLI + Village Bridge SSE event server |
+| `apps/village/` | Next.js village visualization |
+| `config/` | YAML config for pipeline, workers, APIs |
 | `contracts/` | Abstract interfaces (ABCs) |
-| `src/core/` | Domain logic and validation |
-| `src/queue_backends/` | Queue implementations |
-| `src/workers/` | DeepSeek and GPT worker adapters |
-| `src/orchestrator/` | State machine, pipeline routing, error handling |
-| `src/entrypoints/` | CLI, Hermes bridge, API |
-| `src/storage/` | Artifact output and naming |
-| `src/config/` | Configuration loader |
-| `tests/` | Unit, integration, and e2e tests |
-| `scripts/` | Operational scripts |
-| `deploy/` | Docker and environment configs |
-
-## Principles
-
-1. Queue-only communication. No direct worker calls.
-2. Every message is idempotent.
-3. Workers are stateless.
-4. Fail isolated. Crashes never cascade.
-5. Build incrementally. Phase 1 = file queues. Phase N = Redis + clusters.
+| `schema/` | JSON message schemas |
+| `tests/` | 45 unit + integration tests |

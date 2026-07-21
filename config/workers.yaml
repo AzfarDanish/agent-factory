@@ -22,6 +22,6 @@ image_worker:
     max_attempts: 3
     base_delay_seconds: 5
     max_delay_seconds: 120
-  model: dall-e-3
+  model: gpt-image-1
   quality: standard
   size: 1024x1024

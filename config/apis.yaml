@@ -10,6 +10,7 @@ deepseek:
 gpt_image_1:
   base_url: https://api.openai.com/v1
   api_key_env: FACTORY_OPENAI_API_KEY
+  model: gpt-image-1
   rate_limit:
     requests_per_minute: 10
     burst: 3
