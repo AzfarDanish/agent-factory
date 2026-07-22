@@ -6,71 +6,75 @@ import type { MapData } from './tilemap/types'
 import { SpriteCharacter, getRandomHair } from '@/components/SpriteCharacter'
 
 // ═══════════════════════════════════════════
-// REGISTRY
+// BUILDING DEFINITIONS
 // ═══════════════════════════════════════════
 
 interface Build { id: string; label: string; role: string; col: number; row: number; tileW: number; tileH: number; cx: number; cy: number }
 
 const B: Build[] = [
-  { id: 'house-A', label: 'Gatehouse',  role: 'Intake',       col: 22, row: 8,  tileW: 80,  tileH: 112, cx: 0, cy: 0 },
-  { id: 'house-B', label: 'Scriptorium',role: 'Prompt Craft',  col: 50, row: 8,  tileW: 80,  tileH: 112, cx: 0, cy: 0 },
-  { id: 'church',  label: 'Sanctum',    role: 'Gather & Brief',col: 38, row: 18, tileW: 128, tileH: 112, cx: 0, cy: 0 },
+  { id: 'house-A', label: 'Gatehouse',  role: 'Intake',         col: 22, row: 8,  tileW: 80,  tileH: 112, cx: 0, cy: 0 },
+  { id: 'house-B', label: 'Scriptorium',role: 'Prompt Craft',   col: 50, row: 8,  tileW: 80,  tileH: 112, cx: 0, cy: 0 },
+  { id: 'church',  label: 'Sanctum',    role: 'Gather & Brief', col: 38, row: 18, tileW: 128, tileH: 112, cx: 0, cy: 0 },
   { id: 'house-C', label: 'Artisan Hall',role:'Image Generation',col: 55,row: 22, tileW: 128, tileH: 112, cx: 0, cy: 0 },
-  { id: 'house-D', label: 'Bindery',    role: 'Assembly',     col: 22, row: 20, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
-  { id: 'house-E', label: 'Archive',    role: 'Output',       col: 48, row: 34, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
-  { id: 'house-F', label: 'Workshop',   role: 'Quality Check',col: 18, row: 32, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
-  { id: 'pit',     label: 'The Pit',    role: 'Error',        col: 36, row: 41, tileW: 32,  tileH: 48,  cx: 0, cy: 0 },
+  { id: 'house-D', label: 'Bindery',    role: 'Assembly',       col: 22, row: 20, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
+  { id: 'house-E', label: 'Archive',    role: 'Output',         col: 48, row: 34, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
+  { id: 'house-F', label: 'Workshop',   role: 'Quality Check',  col: 18, row: 32, tileW: 80,  tileH: 112, cx: 0, cy: 0 },
+  { id: 'pit',     label: 'The Pit',    role: 'Error',          col: 36, row: 41, tileW: 32,  tileH: 48,  cx: 0, cy: 0 },
 ]
 for (const b of B) { b.cx = b.col * 16 + b.tileW / 2; b.cy = b.row * 16 + b.tileH / 2 }
 const BLDG = new Map(B.map(b => [b.id, b]))
 
 // ═══════════════════════════════════════════
-// PATH SYSTEM  —  direct point-to-point paths
+// PATH SYSTEM  — direct point-to-point
 // ═══════════════════════════════════════════
 
 type Point = { x: number; y: number }
-
 function getPath(fromId: string, toId: string): Point[] {
   if (fromId === toId) return [pos(fromId)]
   return [pos(fromId), pos(toId)]
 }
 
 // ═══════════════════════════════════════════
-// AGENTS  (home building, name, role)
+// AGENT FACTORY  —  spawned from bridge events
 // ═══════════════════════════════════════════
 
-interface A { id: string; name: string; home: string; role: string; hair: H; workBldg: string }
+const HAIR_TYPES = ['shorthair', 'bowlhair', 'curlyhair', 'longhair', 'mophair', 'spikeyhair'] as const
+type H = typeof HAIR_TYPES[number]
 
-const AGENT_DEFS: A[] = [
-  { id: 'a1', name: 'Luna', home: 'house-A', role: 'Intake',     hair: 'shorthair', workBldg: 'house-A' },
-  { id: 'a2', name: 'Kael', home: 'house-B', role: 'Prompt Craft',hair: 'shorthair', workBldg: 'church' },
-  { id: 'a3', name: 'Nova', home: 'house-C', role: 'Image Gen',   hair: 'shorthair', workBldg: 'house-C' },
-  { id: 'a4', name: 'Orin', home: 'house-D', role: 'Assembly',    hair: 'shorthair', workBldg: 'house-E' },
-]
-type H = 'shorthair' | 'bowlhair' | 'curlyhair' | 'longhair' | 'mophair' | 'spikeyhair'
-for (const a of AGENT_DEFS) { a.hair = getRandomHair() as H }
+// Mapping: workflow stage → target building for that agent task
+const STAGE_TO_BUILDING: Record<string, string> = {
+  // Coloring pipeline
+  'intake':        'house-A',
+  'prompt_craft':  'house-B',
+  'gather_brief':  'church',
+  'image_gen':     'house-C',
+  'assembly':      'house-D',
+  'output':        'house-E',
+  'quality_check': 'house-F',
+}
+
+// Names pool for auto-spawned agents
+const AGENT_NAMES = ['Luna', 'Kael', 'Nova', 'Orin', 'Sage', 'Faye', 'Thorn', 'Zale', 'Iris', 'Rune', 'Vale', 'Lyra']
+let nameIdx = 0
 
 // ═══════════════════════════════════════════
-// STATE MACHINE
+// STATE TYPES
 // ═══════════════════════════════════════════
 
 type AgentStatus = 'idle' | 'walk' | 'work' | 'celebrate' | 'fail'
 type ManagerMsg = { from: string; text: string; ts: number }
 
 interface AgentState {
-  id: string; name: string
+  id: string; name: string; trace_id: string
   path: Point[]; pathIdx: number; p: number
-  status: AgentStatus; role: string; hair: H; home: string; curBldg: string
+  status: AgentStatus; hair: H
+  curBldg: string; homeBldg: string; workBldg: string
+  workflow: string
 }
 
 interface ErrorDisplay {
-  type: string
-  message: string
-  details: string
-  agent: string
-  stage: string
-  timestamp: string
-  trace_id: string
+  type: string; message: string; details: string
+  agent: string; stage: string; timestamp: string; trace_id: string
 }
 
 const BRIDGE = process.env.NEXT_PUBLIC_BRIDGE_URL || 'http://localhost:3001'
@@ -79,6 +83,8 @@ function pos(bldg: string) {
   const b = BLDG.get(bldg)!
   return { x: b.cx, y: b.cy }
 }
+
+function randomHair(): H { return HAIR_TYPES[Math.floor(Math.random() * HAIR_TYPES.length)] }
 
 // ═══════════════════════════════════════════
 // HOME COMPONENT
@@ -100,35 +106,54 @@ export default function Home() {
   const [taskActive, setTaskActive] = useState(false)
   const [currentStage, setCurrentStage] = useState(0)
   const [showErrors, setShowErrors] = useState(false)
+
   const idxRef = useRef(0)
   const errorIdxRef = useRef(0)
-
   const agentsRef = useRef<AgentState[]>([])
   const pipelineRef = useRef({
     phase: 'idle' as 'idle' | 'gathering' | 'active' | 'complete',
-    agentIdx: 0,
+    agentIdx: -1,
+    currentTraceId: '' as string,
     subPhase: '' as 'walk_to_work' | 'working' | 'walk_to_church' | '',
     workEndTime: 0,
     taskActive: false,
   })
 
-  // Init agents at home
-  useEffect(() => {
-    const initial = AGENT_DEFS.map(a => ({
-      id: a.id, name: a.name,
-      path: [pos(a.home)], pathIdx: 0, p: 0,
-      status: 'idle' as AgentStatus, role: a.role, hair: a.hair, home: a.home, curBldg: a.home,
-    }))
-    setAgents(initial)
-  }, [])
+  // ── Persistent named agents (spawned on first event) ──
+  const namedAgentsRef = useRef<{ name: string; hair: H; homeBldg: string; workBldg: string }[]>([])
+
+  function spawnNamedAgent(trace_id: string, stage: string, workflow: string): string {
+    const workBldg = STAGE_TO_BUILDING[stage] || 'church'
+    const homeBldg = 'house-A'
+
+    const name = AGENT_NAMES[nameIdx % AGENT_NAMES.length]; nameIdx++
+    const hair = randomHair()
+    namedAgentsRef.current.push({ name, hair, homeBldg, workBldg })
+
+    const agent: AgentState = {
+      id: `job-${trace_id.slice(0, 6)}`,
+      name, trace_id,
+      path: [pos(homeBldg)], pathIdx: 0, p: 0,
+      status: 'idle', hair,
+      curBldg: homeBldg, homeBldg, workBldg,
+      workflow,
+    }
+    setAgents(prev => [...prev, agent])
+    setCurrentStage(0)
+    return name
+  }
+
+  function getAgentByTrace(trace_id: string): AgentState | undefined {
+    return agentsRef.current.find(a => a.trace_id === trace_id)
+  }
 
   // Load tile data
   useEffect(() => { fetch('/tilemap-village.json').then(r => r.json()).then(setData) }, [])
 
-  // Keep ref in sync with state
+  // Keep ref in sync
   useEffect(() => { agentsRef.current = agents }, [agents])
 
-  // ── Animation loop  —  advances walking agents along direct paths
+  // ── Animation loop  —  advances walking agents
   useEffect(() => {
     const tick = setInterval(() => {
       setAgents(prev => {
@@ -169,26 +194,30 @@ export default function Home() {
           idxRef.current += e.count
           processEvents(e.events)
         }
-      } catch {}
+      } catch {
+        // bridge not running — silent
+      }
     }
     poll(); const t = setInterval(poll, 1000); return () => clearInterval(t)
   }, [data])
 
-  // ── Pipeline poller  —  watches agent positions and drives the sequence
+  // ── Pipeline driver  —  watches agent positions and drives sequence
   useEffect(() => {
     if (!taskActive) return
     const t = setInterval(() => {
       const p = pipelineRef.current
-      const agents = agentsRef.current
       if (!p.taskActive) return
 
       // GATHERING: wait until every agent is idle at church
       if (p.phase === 'gathering') {
-        if (agents.every(a => a.status === 'idle' && a.curBldg === 'church')) {
+        const agents = agentsRef.current
+        // Check agents for the current trace
+        const traceAgents = agents.filter(a => a.trace_id === p.currentTraceId)
+        if (traceAgents.length > 0 && traceAgents.every(a => a.status === 'idle' && a.curBldg === 'church')) {
           p.phase = 'active'
           p.agentIdx = 0
           setCurrentStage(1)
-          addMsg('Hermes', 'All agents at the Sanctum!')
+          addMsg('Hermes', 'Agent at the Sanctum!')
           startAgent(0)
         }
         return
@@ -196,35 +225,35 @@ export default function Home() {
 
       if (p.phase !== 'active' || !p.subPhase) return
 
-      const def = AGENT_DEFS[p.agentIdx]
-      const a = agents.find(x => x.id === def.id)
+      const traceAgents = agentsRef.current.filter(a => a.trace_id === p.currentTraceId)
+      const a = traceAgents[p.agentIdx]
       if (!a) return
 
-      // Arrived at work building
-      if (p.subPhase === 'walk_to_work' && a.status === 'idle' && a.curBldg === def.workBldg) {
+      // Arrived at work
+      if (p.subPhase === 'walk_to_work' && a.status === 'idle' && a.curBldg === a.workBldg) {
         p.subPhase = 'working'
         p.workEndTime = Date.now() + 3000
-        setAgents(prev => prev.map(x => x.id === def.id ? { ...x, status: 'work' as const } : x))
+        setAgents(prev => prev.map(x => x.id === a.id ? { ...x, status: 'work' as const } : x))
         return
       }
 
       // Work timer expired
       if (p.subPhase === 'working' && Date.now() >= p.workEndTime) {
-        addMsg(def.name, doneMsg(def.role))
-        if (def.workBldg === 'church') {
+        addMsg(a.name, `${a.name} completed task. Returning.`)
+        if (a.workBldg === 'church') {
           advanceToNext(p.agentIdx)
           return
         }
         p.subPhase = 'walk_to_church'
         setAgents(prev => prev.map(x =>
-          x.id === def.id
-            ? { ...x, path: getPath(def.workBldg, 'church'), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: 'church' }
+          x.id === a.id
+            ? { ...x, path: getPath(a.workBldg, 'church'), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: 'church' }
             : x
         ))
         return
       }
 
-      // Returned to church after work
+      // Returned to church
       if (p.subPhase === 'walk_to_church' && a.status === 'idle' && a.curBldg === 'church') {
         advanceToNext(p.agentIdx)
         return
@@ -233,7 +262,7 @@ export default function Home() {
     return () => clearInterval(t)
   }, [taskActive])
 
-  // ── Idle patrol  —  keeps idle agents walking near their building
+  // ── Idle patrol
   useEffect(() => {
     const t = setInterval(() => {
       const currentAgents = agentsRef.current
@@ -261,20 +290,66 @@ export default function Home() {
   function processEvents(events: any[]) {
     for (const ev of events) {
       const stage = ev.stage
+      const workflow = ev.workflow || 'coloring'
+      const trace_id = ev.trace_id
       const promptText = (ev.prompt || 'page').slice(0, 25)
-      if (stage === 'reasoning' && !pipelineRef.current.taskActive) {
+
+      // New request: spawn agent and start gathering
+      if (stage === 'reasoning' || stage === 'research' || stage === 'outline') {
         const p = pipelineRef.current
+        if (p.taskActive) {
+          // Already processing — queue this trace for next round
+          addMsg('Hermes', `📋 Queued: "${promptText}" (${workflow})`)
+          continue
+        }
         p.taskActive = true
+        p.currentTraceId = trace_id
         p.phase = 'gathering'
+
+        // Spawn agent for this workflow + stage
+        spawnNamedAgent(trace_id, promptText, workflow)
         setTaskActive(true)
-        setCurrentStage(0)
-        addMsg('Hermes', `📋 New request: "${promptText}" — agents gather at Sanctum!`)
-        gatherAtChurch()
+        addMsg('Hermes', `📋 New ${workflow}: "${promptText}" — agent gathering at Sanctum!`)
+        gatherAgents()
+      }
+
+      // Stage completed: advance agent
+      if (stage === 'generating' || stage === 'synthesize' || stage === 'write') {
+        const a = getAgentByTrace(trace_id)
+        if (a) {
+          setAgents(prev => prev.map(x =>
+            x.id === a.id ? { ...x, status: 'work' as const } : x
+          ))
+        }
+      }
+
+      // Pipeline completed
+      if (stage === 'done' || stage === 'deliver') {
+        const a = getAgentByTrace(trace_id)
+        if (a) {
+          setAgents(prev => prev.map(x =>
+            x.id === a.id ? { ...x, status: 'celebrate' as const } : x
+          ))
+          setTimeout(() => {
+            setAgents(prev => prev.filter(x => x.id !== a.id))
+          }, 4000)
+        }
+      }
+
+      // Pipeline failed
+      if (stage === 'failed') {
+        addMsg('Hermes', `❌ Pipeline failed: "${promptText}"`)
+        const a = getAgentByTrace(trace_id)
+        if (a) {
+          setAgents(prev => prev.map(x =>
+            x.id === a.id ? { ...x, status: 'fail' as const } : x
+          ))
+        }
       }
     }
   }
 
-  function gatherAtChurch() {
+  function gatherAgents() {
     setAgents(prev => prev.map(a => {
       if (a.curBldg === 'church' && a.status === 'idle') return a
       return {
@@ -285,63 +360,47 @@ export default function Home() {
   }
 
   function startAgent(idx: number) {
-    const def = AGENT_DEFS[idx]
     const p = pipelineRef.current
-    if (def.workBldg === 'church') {
+    const traceAgents = agentsRef.current.filter(a => a.trace_id === p.currentTraceId)
+    const a = traceAgents[idx]
+    if (!a) return
+
+    if (a.workBldg === 'church') {
       p.subPhase = 'working'
       p.workEndTime = Date.now() + 2000
-      setAgents(prev => prev.map(x => x.id === def.id ? { ...x, status: 'work' as const } : x))
-      addMsg(def.name, startingMsg(def.role))
+      setAgents(prev => prev.map(x => x.id === a.id ? { ...x, status: 'work' as const } : x))
     } else {
       p.subPhase = 'walk_to_work'
       setAgents(prev => prev.map(x =>
-        x.id === def.id
-          ? { ...x, path: getPath('church', def.workBldg), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: def.workBldg }
+        x.id === a.id
+          ? { ...x, path: getPath('church', a.workBldg), pathIdx: 0, p: 0, status: 'walk' as const, curBldg: a.workBldg }
           : x
       ))
-      addMsg(def.name, startingMsg(def.role))
     }
+    addMsg(a.name, `Moving to work...`)
   }
 
   function advanceToNext(idx: number) {
     const p = pipelineRef.current
     const nextIdx = idx + 1
-    if (nextIdx >= AGENT_DEFS.length) {
+    p.agentIdx = nextIdx
+    p.subPhase = ''
+    setCurrentStage(nextIdx + 1)
+
+    const traceAgents = agentsRef.current.filter(a => a.trace_id === p.currentTraceId)
+    if (nextIdx >= traceAgents.length) {
       p.phase = 'complete'
       p.taskActive = false
-      p.subPhase = ''
       setTaskActive(false)
-      setCurrentStage(4)
-      addMsg('Hermes', '🎉 All tasks complete!')
+      setCurrentStage(traceAgents.length)
+      addMsg('Hermes', '🎉 Task complete!')
     } else {
-      p.agentIdx = nextIdx
-      p.subPhase = ''
       startAgent(nextIdx)
     }
   }
 
   function addMsg(from: string, text: string) {
     setMsgs(prev => [...prev.slice(-8), { from, text, ts: Date.now() }])
-  }
-
-  function startingMsg(role: string): string {
-    const m: Record<string, string> = {
-      'Intake': 'Request logged. Over to Kael for prompt crafting.',
-      'Prompt Craft': 'Prompt refined for coloring page. Nova, generate it!',
-      'Image Gen': 'Coloring page generated! Orin, assemble the output.',
-      'Assembly': 'PDF assembled. Stored in output/cartoon/2026-07-21/',
-    }
-    return m[role] || `Working on ${role.toLowerCase()}...`
-  }
-
-  function doneMsg(role: string): string {
-    const m: Record<string, string> = {
-      'Intake': 'Intake done. Returning to Sanctum.',
-      'Prompt Craft': 'Crafted the perfect prompt. Back to Sanctum.',
-      'Image Gen': 'Artwork complete! Heading back.',
-      'Assembly': 'All stored. Mission complete!',
-    }
-    return m[role] || 'Done. Returning.'
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -377,7 +436,7 @@ export default function Home() {
       {/* ── AGENTS ── */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         {agents.map(a => {
-          const pos = (() => {
+          const pos_ = (() => {
             if (a.path.length < 2) {
               const b = BLDG.get(a.curBldg)!
               return { x: b.cx, y: b.cy }
@@ -392,8 +451,7 @@ export default function Home() {
           const isExpanded = expandedBubble === a.id
 
           return (
-            <div key={a.id} className="absolute z-20 flex flex-col items-center" style={{ left: pos.x - 48, top: pos.y - 64 }}>
-              {/* Chat bubble */}
+            <div key={a.id} className="absolute z-20 flex flex-col items-center" style={{ left: pos_.x - 48, top: pos_.y - 64 }}>
               {latestMsg && (
                 <div className="relative mb-1.5 cursor-pointer select-none" style={{ maxWidth: 180 }} onClick={() => setExpandedBubble(isExpanded ? null : a.id)}>
                   <div className="bg-gray-900/95 backdrop-blur-md border border-gray-600/60 rounded-xl px-3 py-1.5 text-center shadow-xl">
@@ -401,21 +459,17 @@ export default function Home() {
                     <div className="text-[10px] text-white leading-snug">{latestMsg.text}</div>
                     {isExpanded && (
                       <div className="mt-1.5 pt-1.5 border-t border-gray-700/40 text-[8px] text-gray-500">
-                        Role: {a.role} | Status: {a.status}
+                        Workflow: {a.workflow} | Status: {a.status}
                       </div>
                     )}
                   </div>
                   <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-900/95 border-r border-b border-gray-600/60 rotate-45" />
                 </div>
               )}
-
-              {/* Character */}
               <div className="relative">
                 <div className="w-8 h-2 rounded-full bg-black/30 mx-auto mb-[-4px]" />
                 <SpriteCharacter anim={anim} hair={a.hair} />
               </div>
-
-              {/* Name label */}
               <div className="mt-1 px-2 py-0.5 bg-black text-white text-[9px] font-bold rounded-full border border-white/20 shadow-md whitespace-nowrap">
                 {a.name}
               </div>
@@ -462,10 +516,16 @@ export default function Home() {
       {/* ── STATUS PANEL ── */}
       <div className="absolute top-4 right-4 z-30 bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-700 p-3 min-w-[150px] text-white text-xs shadow-xl">
         <div className="font-bold uppercase tracking-wider text-gray-400 mb-2">Pipeline</div>
-        {Object.entries(queues).map(([q, d]) => (
-          <div key={q} className="flex justify-between mb-1"><span className="text-gray-300">{q}</span><span className={`font-mono ${(d as number) > 0 ? 'text-blue-300' : 'text-gray-500'}`}>{(d as number) > 0 ? `${d}` : '—'}</span></div>
+        {Object.entries(queues).filter(([, d]) => (d as number) > 0).slice(0, 8).map(([q, d]) => (
+          <div key={q} className="flex justify-between mb-1"><span className="text-gray-300 text-[10px]">{q}</span><span className="font-mono text-blue-300">{d}</span></div>
         ))}
-        <div className="border-t border-gray-700/50 mt-1.5 pt-1.5 flex justify-between"><span className="text-gray-400">Stage</span><span className="font-mono text-green-300">{currentStage}/{AGENT_DEFS.length}</span></div>
+        {Object.entries(queues).filter(([, d]) => (d as number) > 0).length === 0 && (
+          <div className="text-[9px] text-gray-500 italic">All queues empty</div>
+        )}
+        <div className="border-t border-gray-700/50 mt-1.5 pt-1.5 flex justify-between">
+          <span className="text-gray-400">Active</span>
+          <span className="font-mono text-green-300">{agents.length} agents</span>
+        </div>
         {msgs.slice(-1).map((m, i) => (
           <div key={i} className="mt-2 pt-1.5 border-t border-gray-700/50 text-[9px]">
             <span className="text-gray-500">{m.from}:</span> <span className="text-gray-300">{m.text.slice(0, 40)}</span>
@@ -473,7 +533,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* ── ERROR PANEL (bottom-left) ── */}
+      {/* ── ERROR PANEL ── */}
       <div className="absolute bottom-4 left-4 z-30">
         <button
           onClick={() => setShowErrors(!showErrors)}
@@ -519,11 +579,7 @@ export default function Home() {
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[8px] text-gray-500 bg-gray-800/60 px-1.5 py-0.5 rounded-full">{err.type}</span>
                             {err.stage && <span className="text-[8px] text-gray-600">{err.stage}</span>}
-                            {err.agent && <span className="text-[8px] text-gray-500">agent: {err.agent}</span>}
                           </div>
-                          {err.details && (
-                            <div className="text-[8px] text-gray-600 mt-0.5 truncate">{err.details}</div>
-                          )}
                         </div>
                       </div>
                     </div>
