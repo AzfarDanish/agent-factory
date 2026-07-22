@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
-name = "coloring-factory"
+name = "agent-factory"
 version = "0.1.0"
-description = "Queue-driven AI Coloring Page Factory"
+description = "Queue-driven AI agent ecosystem — coloring, research, documentation, and more"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
