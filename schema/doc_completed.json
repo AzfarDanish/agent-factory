@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocCompleted",
+  "description": "A completed documentation deliverable",
+  "type": "object",
+  "required": ["request_id", "topic", "title", "content", "format", "file_path"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Correlation ID"
+    },
+    "topic": {
+      "type": "string",
+      "description": "Original documentation topic"
+    },
+    "title": {
+      "type": "string",
+      "description": "Document title"
+    },
+    "document_type": {
+      "type": "string",
+      "description": "Type of document generated"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "html"],
+      "description": "Output format"
+    },
+    "content": {
+      "type": "string",
+      "description": "Full document content"
+    },
+    "sections": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Section headings in order"
+    },
+    "word_count": {
+      "type": "integer",
+      "description": "Approximate word count"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path to the saved document file"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "outline_time_ms": { "type": "integer" },
+        "writing_time_ms": { "type": "integer" },
+        "tone": { "type": "string" }
+      }
+    }
+  }
+}

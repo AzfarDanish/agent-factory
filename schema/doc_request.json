@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocRequest",
+  "description": "A user-submitted documentation request",
+  "type": "object",
+  "required": ["topic"],
+  "properties": {
+    "topic": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 2000,
+      "description": "Documentation topic or subject"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": ["guide", "tutorial", "api_reference", "knowledge_base", "report", "readme"],
+      "default": "guide",
+      "description": "Type of document to generate"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "html"],
+      "default": "markdown",
+      "description": "Output format"
+    },
+    "tone": {
+      "type": "string",
+      "enum": ["formal", "conversational", "technical"],
+      "default": "formal",
+      "description": "Writing tone"
+    },
+    "max_sections": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 20,
+      "default": 6,
+      "description": "Maximum number of sections in the document"
+    },
+    "audience": {
+      "type": "string",
+      "description": "Target audience description (e.g. 'beginner developers', 'system administrators')"
+    }
+  }
+}

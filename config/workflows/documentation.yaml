@@ -1,0 +1,48 @@
+# Documentation workflow — topic → outline → polished document.
+name: documentation
+description: Documentation pipeline — generate structured outlines and write full documents in multiple formats
+
+stages:
+  - request
+  - outline
+  - write
+  - completed
+  - failed
+
+transitions:
+  request: [outline, failed]
+  outline: [write, failed]
+  write: [completed, failed]
+  completed: []
+  failed: []
+
+stage_queues:
+  request: doc.requests
+  outline: doc.outline
+  write: doc.write
+  completed: doc.completed
+
+stage_message_types:
+  request: doc_request
+  outline: doc_outline
+  write: doc_write
+  completed: doc_completed
+
+valid_message_types:
+  - doc_request
+  - doc_outline
+  - doc_write
+  - doc_completed
+  - error
+
+valid_sources:
+  - user
+  - orchestrator
+  - doc_outline_worker
+  - doc_writer_worker
+
+max_retries: 3
+
+workers:
+  doc.outline: src.workers.doc_outline_worker.DocOutlineWorker
+  doc.write: src.workers.doc_writer_worker.DocWriterWorker

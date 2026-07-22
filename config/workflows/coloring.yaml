@@ -1,0 +1,54 @@
+# Coloring Page Factory — workflow definition
+# Replicates the original hardcoded coloring pipeline as a configurable workflow.
+name: coloring
+description: Generate black-and-white coloring pages from text prompts
+
+stages:
+  - request
+  - reasoning
+  - generating
+  - completed
+  - failed
+
+# Valid stage transitions
+transitions:
+  request: [reasoning, failed]
+  reasoning: [generating, failed]
+  generating: [completed, failed]
+  completed: []
+  failed: []
+
+# Which queue each stage reads from
+stage_queues:
+  request: requests
+  reasoning: reasoning
+  generating: image
+  completed: completed
+
+# Message type produced at each stage
+stage_message_types:
+  request: request
+  reasoning: reasoning_task
+  generating: image_task
+  completed: result
+
+# Allowed message types and sources for this workflow
+valid_message_types:
+  - request
+  - reasoning_task
+  - image_task
+  - result
+  - error
+
+valid_sources:
+  - user
+  - orchestrator
+  - reasoning_worker
+  - image_worker
+
+max_retries: 3
+
+# Map: input queue → worker to consume from it
+workers:
+  reasoning: src.workers.reasoning_worker.ReasoningWorker
+  image: src.workers.image_worker.ImageWorker

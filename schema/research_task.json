@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResearchTask",
+  "description": "A research task for the DeepSeek research worker",
+  "type": "object",
+  "required": ["request_id", "query", "depth"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Correlation ID from the original request"
+    },
+    "query": {
+      "type": "string",
+      "description": "The research question to investigate"
+    },
+    "depth": {
+      "type": "string",
+      "enum": ["quick", "standard", "deep"],
+      "description": "Research depth"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "html", "plain"],
+      "default": "markdown"
+    },
+    "max_sources": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    }
+  }
+}

@@ -1,0 +1,48 @@
+# Research workflow — deep research with AI, structured findings, polished reports.
+name: research
+description: Deep research pipeline — query → DeepSeek research → synthesis → report
+
+stages:
+  - request
+  - research
+  - synthesize
+  - completed
+  - failed
+
+transitions:
+  request: [research, failed]
+  research: [synthesize, failed]
+  synthesize: [completed, failed]
+  completed: []
+  failed: []
+
+stage_queues:
+  request: research.requests
+  research: research.tasks
+  synthesize: research.synthesis
+  completed: research.completed
+
+stage_message_types:
+  request: research_request
+  research: research_task
+  synthesize: research_synthesis
+  completed: research_report
+
+valid_message_types:
+  - research_request
+  - research_task
+  - research_synthesis
+  - research_report
+  - error
+
+valid_sources:
+  - user
+  - orchestrator
+  - research_worker
+  - synthesis_worker
+
+max_retries: 3
+
+workers:
+  research.tasks: src.workers.research_worker.ResearchWorker
+  research.synthesis: src.workers.synthesis_worker.SynthesisWorker

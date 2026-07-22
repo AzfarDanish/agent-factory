@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResearchReport",
+  "description": "A completed research report — the final deliverable of the research pipeline",
+  "type": "object",
+  "required": ["request_id", "query", "title", "report", "format"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Correlation ID"
+    },
+    "query": {
+      "type": "string",
+      "description": "Original research query"
+    },
+    "title": {
+      "type": "string",
+      "description": "Auto-generated report title"
+    },
+    "report": {
+      "type": "string",
+      "description": "Full report content in the specified format"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "html", "plain"],
+      "description": "Output format of the report"
+    },
+    "sections": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of section headings in the report"
+    },
+    "source_count": {
+      "type": "integer",
+      "description": "Number of sources cited"
+    },
+    "word_count": {
+      "type": "integer",
+      "description": "Approximate word count"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path to the saved report file on disk"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "research_time_ms": { "type": "integer" },
+        "synthesis_time_ms": { "type": "integer" },
+        "depth": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResearchRequest",
+  "description": "A user-submitted research request",
+  "type": "object",
+  "required": ["query"],
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000,
+      "description": "Research question or topic"
+    },
+    "depth": {
+      "type": "string",
+      "enum": ["quick", "standard", "deep"],
+      "default": "standard",
+      "description": "Research depth — quick=1 pass, standard=3 passes, deep=5+ passes"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "html", "plain"],
+      "default": "markdown",
+      "description": "Output report format"
+    },
+    "max_sources": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 5,
+      "description": "Maximum number of sources to research"
+    }
+  }
+}

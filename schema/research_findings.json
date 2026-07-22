@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResearchFindings",
+  "description": "Structured research findings from the DeepSeek research worker",
+  "type": "object",
+  "required": ["request_id", "query", "sections", "sources"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Correlation ID"
+    },
+    "query": {
+      "type": "string",
+      "description": "Original research query"
+    },
+    "executive_summary": {
+      "type": "string",
+      "description": "2-3 paragraph executive summary"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["heading", "content"],
+        "properties": {
+          "heading": { "type": "string" },
+          "content": { "type": "string" },
+          "subpoints": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "description": "Structured findings organized into sections"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "relevance": { "type": "string" }
+        }
+      }
+    },
+    "key_insights": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "3-5 key takeaways"
+    },
+    "conflicting_viewpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "position": { "type": "string" },
+          "supporting": { "type": "string" }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "depth": { "type": "string" },
+        "model": { "type": "string" },
+        "generation_time_ms": { "type": "integer" }
+      }
+    }
+  }
+}
